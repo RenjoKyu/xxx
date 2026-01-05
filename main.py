@@ -6,8 +6,8 @@ import os
 
 # 1. System Configuration
 st.set_page_config(
-    page_title="Stock Hunter Pro",
-    page_icon="🎯",
+    page_title="Stock Hunter Pro (US)",
+    page_icon="🇺🇸",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -21,81 +21,83 @@ active_api_key = None
 user_status = "Guest"
 
 with st.sidebar:
-    st.header("🔐 การยืนยันตัวตน (Authentication)")
-    st.info("👋 ยินดีต้อนรับ! กรุณายืนยันตัวตนที่นี่เพื่อใช้งานเต็มรูปแบบ")
-    st.link_button("👉 ขอ API Key (Google AI Studio)", "https://aistudio.google.com/app/apikey", type="primary")
+    st.header("🔐 ยืนยันตัวตน (Authentication)")
+    st.info("👋 ยินดีต้อนรับ! กรุณาใส่ Key เพื่อปลดล็อก AI")
+    
+    st.link_button("👉 ขอ API Key ฟรี (Google)", "https://aistudio.google.com/app/apikey", type="primary")
+    
     st.markdown("---")
     
     auth_input = st.text_input(
         "รหัสผ่าน / API Key", 
         type="password", 
-        help="กรอกรหัส Admin หรือ Gemini API Key ของท่าน"
+        help="ใส่รหัส Admin หรือ API Key ของคุณ"
     )
     
     if auth_input:
         if ADMIN_PASS and auth_input == ADMIN_PASS:
             active_api_key = SERVER_KEY
             user_status = "Admin"
-            st.success("✅ สถานะ: ผู้ดูแลระบบ (Admin)")
+            st.success("✅ Admin Mode: Ready")
         elif auth_input.startswith("AIza"):
             active_api_key = auth_input
             user_status = "User"
-            st.success("✅ สถานะ: เชื่อมต่อ API ส่วนตัว")
+            st.success("✅ User Mode: Ready")
         else:
             st.error("❌ รหัสไม่ถูกต้อง")
     else:
-        st.warning("👤 สถานะ: Guest (จำกัดการใช้งาน)")
-        st.caption("กราฟดูฟรี! แต่ต้อง Login เพื่อใช้ AI")
+        st.warning("👤 Guest Mode: ดูกราฟได้ (AI ล็อกอยู่)")
 
-# --- Core Functions (Fixed Version) ---
+# --- Core Functions (Fixed for Stability) ---
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300) # ลดเวลา Cache ลงเพื่อให้ได้ข้อมูลสดใหม่
 def get_stock_data(symbol):
-    ticker = yf.Ticker(symbol.upper())
+    # บังคับเป็นหุ้น US โดยการตัดช่องว่างและแปลงเป็นตัวใหญ่
+    clean_symbol = symbol.strip().upper()
+    ticker = yf.Ticker(clean_symbol)
     
-    # 1. พยายามดึงกราฟราคาก่อน (สำคัญที่สุด)
     try:
-        df = ticker.history(period="5y", interval="1wk")
+        # ดึงแค่กราฟก่อน (โอกาสพังน้อยสุด)
+        df = ticker.history(period="2y", interval="1wk") # ลดช่วงเวลาลงเหลือ 2 ปีเพื่อให้โหลดไว
+        
         if df.empty:
             return None, None
+            
+        # พยายามดึงชื่อบริษัท (ถ้าพัง ให้ใช้ชื่อย่อแทน)
+        try:
+            name = ticker.info.get('longName', clean_symbol)
+        except:
+            name = clean_symbol
+            
+        return df, name
     except Exception as e:
         return None, None
-
-    # 2. พยายามดึงข้อมูลบริษัท (ถ้าดึงไม่ได้ ให้สร้างข้อมูลจำลองแทน ไม่ให้โปรแกรมพัง)
-    try:
-        info = ticker.info
-        # เช็คว่ามีกุญแจ longName หรือไม่ ถ้าไม่มีให้ใช้ symbol แทน
-        if 'longName' not in info:
-            info['longName'] = symbol.upper()
-    except:
-        # กรณีดึงข้อมูลไม่ได้เลย ให้ใช้ชื่อหุ้นเป็นชื่อบริษัท
-        info = {'longName': symbol.upper()}
-
-    return df, info
 
 def get_ai_analysis(symbol, key):
     if not key: return None
     try:
         genai.configure(api_key=key)
-        # เปลี่ยนเป็น gemini-pro เพื่อความเสถียรสูงสุด
+        # ใช้รุ่น Pro มาตรฐาน (เสถียรกว่า Flash ในบาง Server)
         model = genai.GenerativeModel('gemini-pro')
         
         prompt = f"""
-        วิเคราะห์หุ้น {symbol} ในมุมมองนักลงทุนสถาบัน (Institutional Investor)
-        สรุป Executive Summary สั้นๆ กระชับ เป็นภาษาไทยทางการ:
+        Analyze US Stock: {symbol} for an institutional investor.
+        Provide a concise Executive Summary in Thai (Formal Tone).
         
-        1. 🏢 **Business Model:** ทำอะไร รายได้มาจากไหน
-        2. 🛡️ **Economic Moat:** จุดแข็งที่คู่แข่งสู้ยาก
-        3. ⚠️ **Risk Factors:** ความเสี่ยงที่ต้องระวังที่สุด
+        Structure:
+        1. 🏢 **Business Model:** What does it do? (Revenue source)
+        2. 🛡️ **Economic Moat:** Competitive Advantage?
+        3. ⚠️ **Key Risks:** Main risks right now?
         
-        Note: ตอบเป็นข้อๆ ชัดเจน ภาษาทางการ น่าเชื่อถือ
+        Constraint: Respond in Professional Thai only. No markdown clutter.
         """
         return model.generate_content(prompt).text
     except Exception as e:
-        return f"ระบบ AI ขัดข้อง: {str(e)}"
+        return f"เกิดข้อผิดพลาดที่ AI: {str(e)} (ลองกดปุ่มวิเคราะห์ใหม่อีกครั้ง)"
 
 def calculate_fractals(df):
     levels = []
+    # Fractal Logic
     for i in range(2, len(df)-2):
         low = df['Low'].iloc[i]
         if low < df['Low'].iloc[i-1] and \
@@ -122,51 +124,44 @@ def calculate_fractals(df):
 
 # --- User Interface ---
 
-st.title("Stock Hunter Pro 🎯")
-st.markdown("**ระบบวิเคราะห์กลยุทธ์การลงทุน (Quantitative & AI Analysis)**")
+st.title("Stock Hunter Pro 🇺🇸")
+st.markdown("**US Market Focus: Quantitative & AI Analysis**")
 
-with st.expander("⚠️ คำเตือนและข้อตกลงการใช้งาน (Legal Disclaimer) - โปรดอ่าน", expanded=True):
-    st.error("""
-    **คำเตือนความเสี่ยง (Risk Disclosure):**
-    1. **ไม่ใช่คำแนะนำทางการเงิน:** ข้อมูลนี้เพื่อการศึกษาเท่านั้น
-    2. **ความเสี่ยงของ AI:** ข้อมูลจาก AI อาจมีความคลาดเคลื่อน โปรดตรวจสอบจากแหล่งอื่นประกอบ
-    3. **รับผิดชอบตัวเอง:** ผู้ลงทุนควรใช้วิจารณญาณของตนเอง
-    """)
+with st.expander("⚠️ คำเตือนความเสี่ยง (Disclaimer)", expanded=True):
+    st.error("ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำทางการเงิน การลงทุนมีความเสี่ยง")
 
 st.markdown("---")
 
 # Input Section
 col_input, col_btn = st.columns([3, 1])
 with col_input:
-    symbol = st.text_input("🔍 พิมพ์ชื่อหุ้น (Ticker)", value="NVDA", help="เช่น AAPL, TSLA, PTT.BK").upper()
+    # Default เป็น NVDA ตามที่ต้องการ
+    symbol = st.text_input("🔍 ชื่อหุ้น US (Ticker)", value="NVDA", help="เช่น NVDA, TSLA, AAPL, MSFT").upper()
 with col_btn:
     st.write("")
     st.write("")
-    run_analysis = st.button("🚀 เริ่มวิเคราะห์", type="primary", use_container_width=True)
+    run_analysis = st.button("🚀 วิเคราะห์เลย", type="primary", use_container_width=True)
 
 if run_analysis:
-    with st.spinner("⏳ กำลังประมวลผล Big Data..."):
-        df, info = get_stock_data(symbol)
+    with st.spinner(f"🇺🇸 กำลังดึงข้อมูล {symbol} จากตลาด US..."):
+        df, full_name = get_stock_data(symbol)
         
         if df is None:
-            st.error(f"❌ ไม่พบข้อมูลหุ้น '{symbol}' หรือตลาดปิดปรับปรุง")
-            st.info("💡 คำแนะนำ: ลองตรวจสอบตัวสะกด หรือเติมชื่อตลาด เช่น PTT.BK (สำหรับหุ้นไทย)")
+            st.error(f"❌ ไม่พบข้อมูลหุ้น '{symbol}'")
+            st.info("💡 เช็คตัวสะกด หรือ ลองกดวิเคราะห์ใหม่อีกครั้ง (บางทีเน็ต Server สะดุด)")
             st.stop()
             
         current_price = df['Close'].iloc[-1]
         year_high = df['High'].tail(52).max()
         year_low = df['Low'].tail(52).min()
         
-        # ใช้ .get เพื่อป้องกัน Error กรณีไม่มีชื่อบริษัท
-        full_name = info.get('longName', symbol)
-        
         # 1. Market Overview Card
         with st.container(border=True):
             st.subheader(f"🏢 {full_name} ({symbol})")
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("ราคาปัจจุบัน", f"${current_price:,.2f}")
-            m2.metric("High 52W", f"${year_high:,.2f}")
-            m3.metric("Low 52W", f"${year_low:,.2f}")
+            m1.metric("Price (USD)", f"${current_price:,.2f}")
+            m2.metric("52W High", f"${year_high:,.2f}")
+            m3.metric("52W Low", f"${year_low:,.2f}")
             drawdown = ((current_price - year_high) / year_high) * 100
             m4.metric("Drawdown", f"{drawdown:.1f}%", delta_color="inverse")
 
@@ -174,23 +169,25 @@ if run_analysis:
 
         # 2. AI Analysis Section
         if active_api_key:
-            with st.expander("🧠 บทวิเคราะห์พื้นฐาน (AI Insight)", expanded=True):
-                with st.spinner("🤖 AI กำลังอ่านงบและวิเคราะห์..."):
+            with st.expander("🧠 AI Insight (บทวิเคราะห์พื้นฐาน)", expanded=True):
+                with st.spinner("🤖 AI กำลังอ่านงบการเงิน..."):
                     analysis_text = get_ai_analysis(symbol, active_api_key)
-                    st.markdown(analysis_text)
+                    if analysis_text:
+                        st.markdown(analysis_text)
+                    else:
+                        st.warning("AI ไม่ตอบสนอง กรุณาลองใหม่")
         elif user_status == "Guest":
-            st.warning("🔒 **Guest Mode:** ฟีเจอร์ AI ถูกล็อก (กรุณายืนยันตัวตนที่เมนูซ้ายมือ)")
+            st.warning("🔒 เข้าสู่ระบบด้านซ้ายเพื่อดูบทวิเคราะห์ AI")
 
-        st.markdown("### 🎯 แผนกลยุทธ์แนวรับ (Strategic Entry Zones)")
-        st.caption("วิเคราะห์จากพฤติกรรมราคาในอดีต (Fractal Behavior)")
-
+        st.markdown("### 🎯 แนวรับเชิงกลยุทธ์ (Support Zones)")
+        
         # 3. Strategic Cards
         fractals = calculate_fractals(df)
         supports = [f for f in fractals if f[0] < current_price]
         supports.sort(key=lambda x: x[0], reverse=True)
         
         if not supports:
-            st.info("📈 ราคาทำ All-Time High หรือยังไม่พบฐานแนวรับที่แข็งแกร่ง")
+            st.info("📈 ราคาทำ New High หรือยังไม่มีฐานที่ชัดเจน")
         else:
             top_3 = supports[:3]
             total_strength = sum(x[1] for x in top_3)
@@ -207,15 +204,12 @@ if run_analysis:
                         st.markdown(f"#### 🏷️ ไม้ที่ {i+1}")
                         
                         st.metric(
-                            label="ราคาเข้าซื้อ (Target)",
+                            label="Target Price",
                             value=f"${price:,.2f}",
-                            delta=f"รออีก -{gap_percent:.1f}%",
+                            delta=f"Wait -{gap_percent:.1f}%",
                             delta_color="normal"
                         )
-                        
                         st.divider()
-                        
-                        st.markdown(f"**📉 ส่วนลดจากยอดดอย:** -{discount_from_high:.1f}%")
-                        st.markdown(f"**💪 ความแข็งแกร่ง:** {count} จุด")
-                        st.markdown(f"**⚖️ น้ำหนักแนะนำ: {int(weight*100)}%**")
+                        st.markdown(f"**Discount:** -{discount_from_high:.1f}%")
+                        st.markdown(f"**Strength:** {count} จุด")
                         st.progress(weight)
