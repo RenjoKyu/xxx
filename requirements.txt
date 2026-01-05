@@ -1,8 +1,5 @@
-fastapi
-uvicorn
+streamlit
 yfinance
 pandas
-pydantic
-lxml
-requests
+google-generativeai
 
