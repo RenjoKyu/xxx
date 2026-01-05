@@ -68,7 +68,8 @@ def get_ai_analysis(symbol, key):
     if not key: return None
     try:
         genai.configure(api_key=key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
+
         
         prompt = f"""
         วิเคราะห์หุ้น {symbol} ในมุมมองนักลงทุนสถาบัน (Institutional Investor)
@@ -209,3 +210,4 @@ if run_analysis:
                         st.markdown(f"**💪 ความแข็งแกร่ง:** {count} จุด")
                         st.markdown(f"**⚖️ น้ำหนักแนะนำ: {int(weight*100)}%**")
                         st.progress(weight)
+
