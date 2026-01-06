@@ -68,7 +68,7 @@ st.markdown("""
     .weight-label {
         color: #4CAF50;
         font-size: 14px;
-        font-family: 'Prompt', sans-serif; /* ใช้ Prompt ให้เข้ากับภาษาไทย */
+        font-family: 'Prompt', sans-serif;
     }
     .price-large {
         font-family: 'JetBrains Mono', monospace;
@@ -222,21 +222,24 @@ if analyze_btn or symbol_input:
             else:
                 st.error(f"เกิดข้อผิดพลาด: {error_msg}")
         else:
+            # คำนวณ High/Low 52 สัปดาห์ ไว้ใช้เปรียบเทียบ
+            one_year_high = df['High'].tail(52).max()
+            one_year_low = df['Low'].tail(52).min()
             
             # --- Company Header ---
+            # แก้ไข: กลับไปใช้ NASDAQ/NYSE ตามสั่ง
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
-                <div class='ticker-sub'>{symbol_input} • ตลาดหลักทรัพย์สหรัฐฯ</div>
+                <div class='ticker-sub'>{symbol_input} • NASDAQ/NYSE</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- Metrics (Removed Delta/Change %) ---
+            # --- Metrics ---
             c1, c2, c3 = st.columns(3)
-            # แก้ไขตรงนี้: ลบ Delta ออก แสดงแค่ราคา
             c1.metric("ราคาปัจจุบัน (USD)", f"${current_price:,.2f}") 
-            c2.metric("สูงสุด 52 สัปดาห์", f"${df['High'].tail(52).max():,.2f}")
-            c3.metric("ต่ำสุด 52 สัปดาห์", f"${df['Low'].tail(52).min():,.2f}")
+            c2.metric("สูงสุด 52 สัปดาห์", f"${one_year_high:,.2f}")
+            c3.metric("ต่ำสุด 52 สัปดาห์", f"${one_year_low:,.2f}")
             
             st.markdown("---")
 
@@ -262,7 +265,12 @@ if analyze_btn or symbol_input:
                 # Cards
                 for i, (price, count) in enumerate(top_3):
                     weight = round((count / total_strength) * 100)
-                    gap = ((current_price - price) / current_price) * 100
+                    
+                    # คำนวณ % ห่างจากราคาปัจจุบัน
+                    dist_from_curr = ((price - current_price) / current_price) * 100
+                    
+                    # คำนวณ % ห่างจากจุดสูงสุด (52 Week High)
+                    dist_from_high = ((price - one_year_high) / one_year_high) * 100
                     
                     st.markdown(f"""
                     <div class="strategy-card">
@@ -273,8 +281,8 @@ if analyze_btn or symbol_input:
                         <div class="price-large">${price:,.2f}</div>
                         <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
                             <div style="display:flex; justify-content:space-between; color:#bbb; font-size:13px; font-family:'Prompt';">
-                                <span>ส่วนลดราคา: -{gap:.1f}%</span>
-                                <span>ความแข็งแกร่งของฐาน: {count} สัปดาห์</span>
+                                <span>ห่างจากราคาปัจจุบัน: {dist_from_curr:.2f}%</span>
+                                <span>ห่างจากจุดสูงสุด: {dist_from_high:.2f}%</span>
                             </div>
                         </div>
                     </div>
