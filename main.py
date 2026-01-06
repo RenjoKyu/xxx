@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Stock Hunter: US Edition",
+    page_title="Stock Hunter: US Edition (Thai)",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -68,7 +68,7 @@ st.markdown("""
     .weight-label {
         color: #4CAF50;
         font-size: 14px;
-        font-family: 'JetBrains Mono', monospace;
+        font-family: 'Prompt', sans-serif; /* ใช้ Prompt ให้เข้ากับภาษาไทย */
     }
     .price-large {
         font-family: 'JetBrains Mono', monospace;
@@ -124,19 +124,19 @@ st.markdown("""
 # -----------------------------------------------------------
 # Sidebar
 with st.sidebar:
-    st.markdown("### ตั้งค่าระบบ (SYSTEM CONFIG)")
+    st.markdown("### ตั้งค่าระบบ")
     
-    symbol_input = st.text_input("ระบุชื่อย่อหุ้น (TICKER)", value="NVDA").upper()
+    symbol_input = st.text_input("ระบุชื่อย่อหุ้น (Ticker)", value="NVDA").upper()
     
     # Default Timeframe = 5y
-    period_input = st.selectbox("กรอบเวลาข้อมูล (TIMEFRAME)", ["1y", "2y", "5y", "10y"], index=2)
+    period_input = st.selectbox("ระยะเวลาย้อนหลัง", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
     st.markdown("""
     <div style='font-size: 12px; color: #666; font-family: "Prompt";'>
-    MARKET: US EQUITY (NASDAQ/NYSE)<br>
-    CURRENCY: USD ONLY<br>
-    STATUS: READY
+    ตลาด: หุ้นสหรัฐฯ (NASDAQ/NYSE)<br>
+    สกุลเงิน: ดอลลาร์สหรัฐ (USD)<br>
+    สถานะ: พร้อมใช้งาน
     </div>
     """, unsafe_allow_html=True)
     
@@ -151,7 +151,7 @@ def get_us_stock_data(symbol, period):
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
-            return None, None, "No Data", None
+            return None, None, "ไม่พบข้อมูล", None
 
         # 2. Info & Real-time Price Check
         info = ticker.info
@@ -169,7 +169,7 @@ def get_us_stock_data(symbol, period):
 
         # 3. Filter US Only
         if currency != 'USD':
-            return None, None, "Not US Stock", None
+            return None, None, "ไม่ใช่หุ้นสหรัฐฯ", None
 
         full_name = info.get('longName', symbol)
         return df, full_name, currency, real_price
@@ -205,39 +205,36 @@ def calculate_fractal_levels(df):
 # Main Execution
 
 # Header Section
-st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ US EDITION</span></h2>", unsafe_allow_html=True)
-st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>DATA FEED: YAHOO FINANCE | DATE: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
+st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ ฉบับหุ้นสหรัฐฯ</span></h2>", unsafe_allow_html=True)
+st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>แหล่งข้อมูล: YAHOO FINANCE | วันที่: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 if analyze_btn or symbol_input:
-    with st.spinner("PROCESSING DATA..."):
-        # Unpack 4 values now (added current_price)
+    with st.spinner("กำลังประมวลผลข้อมูล..."):
+        # Unpack 4 values
         df, full_name, error_msg, current_price = get_us_stock_data(symbol_input, period_input)
 
         if df is None:
-            if error_msg == "Not US Stock":
-                st.error(f"SYSTEM ERROR: '{symbol_input}' ไม่ใช่หุ้นสกุลเงิน USD (รองรับเฉพาะตลาดสหรัฐฯ)")
-            elif error_msg == "No Data":
-                st.error(f"DATA ERROR: ไม่พบข้อมูล '{symbol_input}' กรุณาตรวจสอบตัวสะกด")
+            if error_msg == "ไม่ใช่หุ้นสหรัฐฯ":
+                st.error(f"ระบบแจ้งเตือน: '{symbol_input}' ไม่ใช่หุ้นสกุลเงิน USD (รองรับเฉพาะตลาดสหรัฐฯ)")
+            elif error_msg == "ไม่พบข้อมูล":
+                st.error(f"ไม่พบข้อมูล: '{symbol_input}' กรุณาตรวจสอบตัวสะกด")
             else:
-                st.error(f"ERROR: {error_msg}")
+                st.error(f"เกิดข้อผิดพลาด: {error_msg}")
         else:
-            # Calculate metrics
-            # Note: We use current_price from API, but Previous Close from history for % change
-            prev_close = df['Close'].iloc[-2] if len(df) > 1 else current_price
-            change_pct = ((current_price - prev_close) / prev_close) * 100
             
             # --- Company Header ---
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
-                <div class='ticker-sub'>{symbol_input} • NASDAQ/NYSE</div>
+                <div class='ticker-sub'>{symbol_input} • ตลาดหลักทรัพย์สหรัฐฯ</div>
             </div>
             """, unsafe_allow_html=True)
 
-            # --- Metrics (Removed Volatility/ATR) ---
+            # --- Metrics (Removed Delta/Change %) ---
             c1, c2, c3 = st.columns(3)
-            c1.metric("ราคาปัจจุบัน (PRICE)", f"${current_price:,.2f}", f"{change_pct:.2f}%")
+            # แก้ไขตรงนี้: ลบ Delta ออก แสดงแค่ราคา
+            c1.metric("ราคาปัจจุบัน (USD)", f"${current_price:,.2f}") 
             c2.metric("สูงสุด 52 สัปดาห์", f"${df['High'].tail(52).max():,.2f}")
             c3.metric("ต่ำสุด 52 สัปดาห์", f"${df['Low'].tail(52).min():,.2f}")
             
@@ -249,12 +246,12 @@ if analyze_btn or symbol_input:
             waiting_levels.sort(key=lambda x: x[0], reverse=True)
             top_3 = waiting_levels[:3]
 
-            st.markdown("### แผนกลยุทธ์ (STRATEGIC EXECUTION)")
+            st.markdown("### แผนกลยุทธ์การลงทุน")
             
             if not top_3:
                 st.markdown("""
                 <div class="custom-alert">
-                    <b>STATUS: ALL TIME HIGH</b><br>
+                    <b>สถานะ: ทำจุดสูงสุดใหม่ (All Time High)</b><br>
                     ราคากำลังทำจุดสูงสุดใหม่ ไม่พบแนวรับที่มีนัยสำคัญในระยะใกล้<br>
                     คำแนะนำ: รอให้ราคาพักตัวสร้างฐาน (Base Formation) ก่อนพิจารณาลงทุน
                 </div>
@@ -270,14 +267,14 @@ if analyze_btn or symbol_input:
                     st.markdown(f"""
                     <div class="strategy-card">
                         <div class="strategy-head">
-                            <span class="zone-label">ZONE {i+1}</span>
-                            <span class="weight-label">ALLOCATION {weight}%</span>
+                            <span class="zone-label">ไม้ที่ {i+1}</span>
+                            <span class="weight-label">น้ำหนัก {weight}%</span>
                         </div>
                         <div class="price-large">${price:,.2f}</div>
                         <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
                             <div style="display:flex; justify-content:space-between; color:#bbb; font-size:13px; font-family:'Prompt';">
-                                <span>ส่วนลด (Discount): -{gap:.1f}%</span>
-                                <span>ความแข็งแกร่ง (Base Strength): {count} สัปดาห์</span>
+                                <span>ส่วนลดราคา: -{gap:.1f}%</span>
+                                <span>ความแข็งแกร่งของฐาน: {count} สัปดาห์</span>
                             </div>
                         </div>
                     </div>
