@@ -128,7 +128,7 @@ with st.sidebar:
     
     symbol_input = st.text_input("ระบุชื่อย่อหุ้น (TICKER)", value="NVDA").upper()
     
-    # ปรับ Default เป็น 5y (index=2)
+    # Default Timeframe = 5y
     period_input = st.selectbox("กรอบเวลาข้อมูล (TIMEFRAME)", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
@@ -147,25 +147,35 @@ with st.sidebar:
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. History
+        # 1. History (Weekly for Fractals)
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
-            return None, None, "No Data"
+            return None, None, "No Data", None
 
-        # 2. Info
+        # 2. Info & Real-time Price Check
         info = ticker.info
         currency = info.get('currency', 'Unknown')
         
+        # Priority: Try to get real-time price from info -> fast_info -> last history close
+        real_price = info.get('currentPrice')
+        if real_price is None:
+            real_price = info.get('regularMarketPrice')
+        if real_price is None:
+            try:
+                real_price = ticker.fast_info.last_price
+            except:
+                real_price = df['Close'].iloc[-1] # Fallback if everything fails
+
         # 3. Filter US Only
         if currency != 'USD':
-            return None, None, "Not US Stock"
+            return None, None, "Not US Stock", None
 
         full_name = info.get('longName', symbol)
-        return df, full_name, currency
+        return df, full_name, currency, real_price
 
     except Exception as e:
-        return None, None, str(e)
+        return None, None, str(e), None
 
 def calculate_fractal_levels(df):
     levels = []
@@ -201,7 +211,8 @@ st.markdown("---")
 
 if analyze_btn or symbol_input:
     with st.spinner("PROCESSING DATA..."):
-        df, full_name, error_msg = get_us_stock_data(symbol_input, period_input)
+        # Unpack 4 values now (added current_price)
+        df, full_name, error_msg, current_price = get_us_stock_data(symbol_input, period_input)
 
         if df is None:
             if error_msg == "Not US Stock":
@@ -211,8 +222,9 @@ if analyze_btn or symbol_input:
             else:
                 st.error(f"ERROR: {error_msg}")
         else:
-            current_price = df['Close'].iloc[-1]
-            prev_close = df['Close'].iloc[-2]
+            # Calculate metrics
+            # Note: We use current_price from API, but Previous Close from history for % change
+            prev_close = df['Close'].iloc[-2] if len(df) > 1 else current_price
             change_pct = ((current_price - prev_close) / prev_close) * 100
             
             # --- Company Header ---
@@ -223,14 +235,11 @@ if analyze_btn or symbol_input:
             </div>
             """, unsafe_allow_html=True)
 
-            # --- Metrics ---
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("ราคาล่าสุด (PRICE)", f"${current_price:,.2f}", f"{change_pct:.2f}%")
+            # --- Metrics (Removed Volatility/ATR) ---
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ราคาปัจจุบัน (PRICE)", f"${current_price:,.2f}", f"{change_pct:.2f}%")
             c2.metric("สูงสุด 52 สัปดาห์", f"${df['High'].tail(52).max():,.2f}")
             c3.metric("ต่ำสุด 52 สัปดาห์", f"${df['Low'].tail(52).min():,.2f}")
-            
-            atr_val = (df['High']-df['Low']).tail(14).mean()
-            c4.metric("ความผันผวน (ATR)", f"${atr_val:.2f}")
             
             st.markdown("---")
 
