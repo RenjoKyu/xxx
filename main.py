@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Stock Hunter: US Edition (Thai)",
+    page_title="STOCK HUNTER",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -128,7 +128,6 @@ with st.sidebar:
     
     symbol_input = st.text_input("ระบุชื่อย่อหุ้น (Ticker)", value="NVDA").upper()
     
-    # Default Timeframe = 5y
     period_input = st.selectbox("ระยะเวลาย้อนหลัง", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
@@ -147,37 +146,39 @@ with st.sidebar:
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. Fetch History first (Most robust check if stock exists)
+        # 1. Fetch History
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
             return None, None, "ไม่พบข้อมูล (History Empty)", None
 
-        # 2. Get Info & Price using fast_info (More reliable than .info)
+        # 2. Get Full Name and Price with robust fallback
+        full_name = symbol # Default
+        current_price = None
+        currency = "Unknown"
+
         try:
-            # fast_info is newer and faster
-            currency = ticker.fast_info.currency
-            current_price = ticker.fast_info.last_price
-        except:
-            # Fallback to .info if fast_info fails
+            # พยายามดึงจาก info ก่อน (ละเอียดสุด)
             info = ticker.info
-            currency = info.get('currency', 'Unknown')
-            current_price = info.get('currentPrice', info.get('regularMarketPrice', df['Close'].iloc[-1]))
+            full_name = info.get('longName', symbol)
+            current_price = info.get('currentPrice', info.get('regularMarketPrice'))
+            currency = info.get('currency', 'USD')
+        except:
+            # สำรองด้วย fast_info
+            try:
+                full_name = ticker.fast_info.get('longName', symbol)
+                current_price = ticker.fast_info.last_price
+                currency = ticker.fast_info.currency
+            except:
+                pass
+
+        # Fallback price if still None
+        if current_price is None:
+            current_price = df['Close'].iloc[-1]
 
         # 3. Filter US Only
-        # ถ้าหา currency ไม่เจอ ให้เช็ค suffix (หุ้น US มักไม่มี suffix)
-        if currency != 'USD':
-            # อนุโลมถ้าหา currency ไม่เจอแต่ ticker ดูเป็น US (เช่นไม่มี .)
-            if currency == 'Unknown' and '.' not in symbol:
-                currency = 'USD'
-            else:
-                return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
-
-        # 4. Get Name (info is usually best for name, but fallback to symbol)
-        try:
-            full_name = ticker.info.get('longName', symbol)
-        except:
-            full_name = symbol
+        if currency != 'USD' and '.' in symbol:
+            return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
 
         return df, full_name, currency, current_price
 
@@ -212,13 +213,12 @@ def calculate_fractal_levels(df):
 # Main Execution
 
 # Header Section
-st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'> Us</span></h2>", unsafe_allow_html=True)
+st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ ฉบับหุ้นสหรัฐฯ</span></h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>แหล่งข้อมูล: YAHOO FINANCE | วันที่: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 if analyze_btn or symbol_input:
     with st.spinner("กำลังประมวลผลข้อมูล..."):
-        # Unpack 4 values
         df, full_name, error_msg, current_price = get_us_stock_data(symbol_input, period_input)
 
         if df is None:
@@ -233,7 +233,7 @@ if analyze_btn or symbol_input:
             one_year_high = df['High'].tail(52).max()
             one_year_low = df['Low'].tail(52).min()
             
-            # --- Company Header ---
+            # --- Company Header (Display Full Name) ---
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
@@ -271,11 +271,7 @@ if analyze_btn or symbol_input:
                 # Cards
                 for i, (price, count) in enumerate(top_3):
                     weight = round((count / total_strength) * 100)
-                    
-                    # คำนวณ % ห่างจากราคาปัจจุบัน
                     dist_from_curr = ((price - current_price) / current_price) * 100
-                    
-                    # คำนวณ % ห่างจากจุดสูงสุด (52 Week High)
                     dist_from_high = ((price - one_year_high) / one_year_high) * 100
                     
                     st.markdown(f"""
@@ -304,4 +300,3 @@ st.markdown("""
     ผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหายหรือการขาดทุนใดๆ ที่เกิดขึ้นจากการใช้งานข้อมูลนี้
 </div>
 """, unsafe_allow_html=True)
-
