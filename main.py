@@ -91,7 +91,7 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    /* Custom Alert Box (To replace st.info/error with no icons) */
+    /* Custom Alert Box */
     .custom-alert {
         padding: 15px;
         border-left: 3px solid #FFC107;
@@ -99,6 +99,17 @@ st.markdown("""
         color: #e0e0e0;
         font-size: 14px;
         margin-bottom: 20px;
+    }
+
+    /* Legal Disclaimer Footer */
+    .legal-footer {
+        margin-top: 40px;
+        padding: 20px;
+        border-top: 1px solid #333;
+        color: #555;
+        font-size: 11px;
+        font-family: 'Prompt', sans-serif;
+        text-align: justify;
     }
     
     /* Input Field */
@@ -117,7 +128,8 @@ with st.sidebar:
     
     symbol_input = st.text_input("ระบุชื่อย่อหุ้น (TICKER)", value="NVDA").upper()
     
-    period_input = st.selectbox("กรอบเวลาข้อมูล (TIMEFRAME)", ["1y", "2y", "5y", "10y"], index=1)
+    # ปรับ Default เป็น 5y (index=2)
+    period_input = st.selectbox("กรอบเวลาข้อมูล (TIMEFRAME)", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
     st.markdown("""
@@ -261,3 +273,14 @@ if analyze_btn or symbol_input:
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+
+# Legal Disclaimer Section (Footer)
+st.markdown("""
+<div class="legal-footer">
+    <b>ข้อจำกัดความรับผิดและคำเตือน (DISCLAIMER):</b><br>
+    ข้อมูล บทวิเคราะห์ และแผนกลยุทธ์ที่แสดงผลในระบบนี้ เป็นเพียงผลลัพธ์จากการคำนวณทางสถิติและคณิตศาสตร์จากข้อมูลราคาในอดีต (Technical Analysis) เท่านั้น 
+    <u>ไม่ใช่คำแนะนำทางการเงิน (Financial Advice)</u> ไม่ใช่การชักชวนให้ซื้อขายหลักทรัพย์ และไม่ได้รับประกันผลตอบแทนในอนาคต 
+    การลงทุนในตลาดหลักทรัพย์ต่างประเทศมีความเสี่ยงสูง ผู้ใช้งานควรศึกษาข้อมูลเพิ่มเติมจากหลายแหล่งและใช้วิจารณญาณในการตัดสินใจด้วยตนเอง 
+    ผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหายหรือการขาดทุนใดๆ ที่เกิดขึ้นจากการใช้งานข้อมูลนี้
+</div>
+""", unsafe_allow_html=True)
