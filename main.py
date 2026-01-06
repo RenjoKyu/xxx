@@ -212,7 +212,7 @@ def calculate_fractal_levels(df):
 # Main Execution
 
 # Header Section
-st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ ฉบับหุ้นสหรัฐฯ</span></h2>", unsafe_allow_html=True)
+st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'> Us</span></h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>แหล่งข้อมูล: YAHOO FINANCE | วันที่: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
@@ -304,3 +304,4 @@ st.markdown("""
     ผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหายหรือการขาดทุนใดๆ ที่เกิดขึ้นจากการใช้งานข้อมูลนี้
 </div>
 """, unsafe_allow_html=True)
+
