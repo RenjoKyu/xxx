@@ -147,35 +147,42 @@ with st.sidebar:
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. History (Weekly for Fractals)
+        # 1. Fetch History first (Most robust check if stock exists)
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
-            return None, None, "ไม่พบข้อมูล", None
+            return None, None, "ไม่พบข้อมูล (History Empty)", None
 
-        # 2. Info & Real-time Price Check
-        info = ticker.info
-        currency = info.get('currency', 'Unknown')
-        
-        # Priority: Try to get real-time price from info -> fast_info -> last history close
-        real_price = info.get('currentPrice')
-        if real_price is None:
-            real_price = info.get('regularMarketPrice')
-        if real_price is None:
-            try:
-                real_price = ticker.fast_info.last_price
-            except:
-                real_price = df['Close'].iloc[-1] # Fallback if everything fails
+        # 2. Get Info & Price using fast_info (More reliable than .info)
+        try:
+            # fast_info is newer and faster
+            currency = ticker.fast_info.currency
+            current_price = ticker.fast_info.last_price
+        except:
+            # Fallback to .info if fast_info fails
+            info = ticker.info
+            currency = info.get('currency', 'Unknown')
+            current_price = info.get('currentPrice', info.get('regularMarketPrice', df['Close'].iloc[-1]))
 
         # 3. Filter US Only
+        # ถ้าหา currency ไม่เจอ ให้เช็ค suffix (หุ้น US มักไม่มี suffix)
         if currency != 'USD':
-            return None, None, "ไม่ใช่หุ้นสหรัฐฯ", None
+            # อนุโลมถ้าหา currency ไม่เจอแต่ ticker ดูเป็น US (เช่นไม่มี .)
+            if currency == 'Unknown' and '.' not in symbol:
+                currency = 'USD'
+            else:
+                return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
 
-        full_name = info.get('longName', symbol)
-        return df, full_name, currency, real_price
+        # 4. Get Name (info is usually best for name, but fallback to symbol)
+        try:
+            full_name = ticker.info.get('longName', symbol)
+        except:
+            full_name = symbol
+
+        return df, full_name, currency, current_price
 
     except Exception as e:
-        return None, None, str(e), None
+        return None, None, f"Error: {str(e)}", None
 
 def calculate_fractal_levels(df):
     levels = []
@@ -215,19 +222,18 @@ if analyze_btn or symbol_input:
         df, full_name, error_msg, current_price = get_us_stock_data(symbol_input, period_input)
 
         if df is None:
-            if error_msg == "ไม่ใช่หุ้นสหรัฐฯ":
-                st.error(f"ระบบแจ้งเตือน: '{symbol_input}' ไม่ใช่หุ้นสกุลเงิน USD (รองรับเฉพาะตลาดสหรัฐฯ)")
-            elif error_msg == "ไม่พบข้อมูล":
+            if "ไม่ใช่หุ้นสหรัฐฯ" in error_msg:
+                st.error(f"ระบบแจ้งเตือน: {error_msg}")
+            elif "ไม่พบข้อมูล" in error_msg:
                 st.error(f"ไม่พบข้อมูล: '{symbol_input}' กรุณาตรวจสอบตัวสะกด")
             else:
                 st.error(f"เกิดข้อผิดพลาด: {error_msg}")
         else:
-            # คำนวณ High/Low 52 สัปดาห์ ไว้ใช้เปรียบเทียบ
+            # คำนวณ High/Low 52 สัปดาห์
             one_year_high = df['High'].tail(52).max()
             one_year_low = df['Low'].tail(52).min()
             
             # --- Company Header ---
-            # แก้ไข: กลับไปใช้ NASDAQ/NYSE ตามสั่ง
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
@@ -298,3 +304,4 @@ st.markdown("""
     ผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหายหรือการขาดทุนใดๆ ที่เกิดขึ้นจากการใช้งานข้อมูลนี้
 </div>
 """, unsafe_allow_html=True)
+
