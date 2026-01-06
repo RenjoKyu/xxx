@@ -1,114 +1,119 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import google.generativeai as genai
-import os
+import plotly.graph_objects as go
+from datetime import datetime
 
-# 1. System Configuration
+# 1. Page Configuration
 st.set_page_config(
-    page_title="Stock Hunter Pro (US)",
-    page_icon="🇺🇸",
+    page_title="Stock Hunter Pro",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Load Environment Variables
-SERVER_KEY = os.environ.get("GEMINI_API_KEY")
-ADMIN_PASS = os.environ.get("ADMIN_PASSWORD")
+# 2. Custom CSS (Minimalist & Professional + Thai Font)
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap');
 
-# --- Authentication Logic ---
-active_api_key = None
-user_status = "Guest"
-
-with st.sidebar:
-    st.header("🔐 ยืนยันตัวตน (Authentication)")
-    st.info("👋 ยินดีต้อนรับ! กรุณาใส่ Key เพื่อปลดล็อก AI")
+    /* Global Font & Background */
+    .stApp {
+        font-family: 'Prompt', -apple-system, sans-serif;
+    }
     
-    st.link_button("👉 ขอ API Key ฟรี (Google)", "https://aistudio.google.com/app/apikey", type="primary")
+    /* Metrics Styling */
+    div[data-testid="stMetricValue"] {
+        font-size: 24px;
+        font-weight: 500;
+        font-family: 'SF Mono', 'Consolas', monospace; /* Keep numbers mono */
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 14px;
+        color: #888;
+        font-family: 'Prompt', sans-serif;
+    }
+
+    /* Custom Card for Strategy */
+    .strategy-card {
+        background-color: rgba(255, 255, 255, 0.03);
+        border: 1px solid #333;
+        padding: 20px;
+        border-radius: 4px;
+        margin-bottom: 12px;
+        transition: all 0.2s ease;
+    }
+    .strategy-card:hover {
+        border-color: #555;
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    .zone-label {
+        font-family: 'Prompt', sans-serif;
+        font-size: 14px;
+        color: #aaa;
+        margin-bottom: 8px;
+    }
+    .price-tag {
+        font-family: 'SF Mono', 'Consolas', monospace;
+        font-size: 22px;
+        font-weight: 500;
+        color: #e0e0e0;
+    }
+    
+    /* Remove default padding */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Adjust Input styling */
+    .stTextInput input {
+        font-family: 'SF Mono', monospace;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------------------------------------
+# Sidebar
+with st.sidebar:
+    st.markdown("### การตั้งค่าระบบ")
+    symbol_input = st.text_input("ชื่อย่อหุ้น (TICKER)", value="NVDA").upper()
+    period_input = st.selectbox("กรอบเวลาคำนวณ", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
+    st.markdown("""
+    <div style='font-size: 12px; color: #666; font-family: "Prompt";'>
+    ระบบ: FRACTAL GEOMETRY<br>
+    สถานะ: พร้อมใช้งาน<br>
+    เวอร์ชัน: 2.1.0 (TH)
+    </div>
+    """, unsafe_allow_html=True)
     
-    auth_input = st.text_input(
-        "รหัสผ่าน / API Key", 
-        type="password", 
-        help="ใส่รหัส Admin หรือ API Key ของคุณ"
-    )
-    
-    if auth_input:
-        if ADMIN_PASS and auth_input == ADMIN_PASS:
-            active_api_key = SERVER_KEY
-            user_status = "Admin"
-            st.success("✅ Admin Mode: Ready")
-        elif auth_input.startswith("AIza"):
-            active_api_key = auth_input
-            user_status = "User"
-            st.success("✅ User Mode: Ready")
-        else:
-            st.error("❌ รหัสไม่ถูกต้อง")
-    else:
-        st.warning("👤 Guest Mode: ดูกราฟได้ (AI ล็อกอยู่)")
+    analyze_btn = st.button("เริ่มการวิเคราะห์", type="primary", use_container_width=True)
 
-# --- Core Functions (Fixed for Stability) ---
-
-@st.cache_data(ttl=300) # ลดเวลา Cache ลงเพื่อให้ได้ข้อมูลสดใหม่
-def get_stock_data(symbol):
-    # บังคับเป็นหุ้น US โดยการตัดช่องว่างและแปลงเป็นตัวใหญ่
-    clean_symbol = symbol.strip().upper()
-    ticker = yf.Ticker(clean_symbol)
-    
+# -----------------------------------------------------------
+# Logic Functions
+def get_stock_data(symbol, period):
+    ticker = yf.Ticker(symbol)
     try:
-        # ดึงแค่กราฟก่อน (โอกาสพังน้อยสุด)
-        df = ticker.history(period="2y", interval="1wk") # ลดช่วงเวลาลงเหลือ 2 ปีเพื่อให้โหลดไว
-        
-        if df.empty:
-            return None, None
-            
-        # พยายามดึงชื่อบริษัท (ถ้าพัง ให้ใช้ชื่อย่อแทน)
-        try:
-            name = ticker.info.get('longName', clean_symbol)
-        except:
-            name = clean_symbol
-            
-        return df, name
-    except Exception as e:
-        return None, None
+        df = ticker.history(period=period, interval="1wk")
+        info = ticker.info
+        full_name = info.get('longName', symbol)
+        currency = info.get('currency', 'USD')
+        return df, full_name, currency
+    except:
+        return None, None, None
 
-def get_ai_analysis(symbol, key):
-    if not key: return None
-    try:
-        genai.configure(api_key=key)
-        # ใช้รุ่น Pro มาตรฐาน (เสถียรกว่า Flash ในบาง Server)
-        model = genai.GenerativeModel('gemini-pro')
-        
-        prompt = f"""
-        Analyze US Stock: {symbol} for an institutional investor.
-        Provide a concise Executive Summary in Thai (Formal Tone).
-        
-        Structure:
-        1. 🏢 **Business Model:** What does it do? (Revenue source)
-        2. 🛡️ **Economic Moat:** Competitive Advantage?
-        3. ⚠️ **Key Risks:** Main risks right now?
-        
-        Constraint: Respond in Professional Thai only. No markdown clutter.
-        """
-        return model.generate_content(prompt).text
-    except Exception as e:
-        return f"เกิดข้อผิดพลาดที่ AI: {str(e)} (ลองกดปุ่มวิเคราะห์ใหม่อีกครั้ง)"
-
-def calculate_fractals(df):
+def calculate_fractal_levels(df):
     levels = []
-    # Fractal Logic
     for i in range(2, len(df)-2):
-        low = df['Low'].iloc[i]
-        if low < df['Low'].iloc[i-1] and \
-           low < df['Low'].iloc[i-2] and \
-           low < df['Low'].iloc[i+1] and \
-           low < df['Low'].iloc[i+2]:
-            levels.append(low)
-    
-    levels.sort()
+        low_val = df['Low'].iloc[i]
+        if low_val < df['Low'].iloc[i-1] and low_val < df['Low'].iloc[i-2] and \
+           low_val < df['Low'].iloc[i+1] and low_val < df['Low'].iloc[i+2]:
+            levels.append(low_val)
+            
     consolidated = []
     if levels:
+        levels.sort()
         while levels:
             base = levels.pop(0)
             group = [base]
@@ -122,94 +127,118 @@ def calculate_fractals(df):
             consolidated.append((sum(group)/len(group), len(group)))
     return consolidated
 
-# --- User Interface ---
+def plot_minimal_chart(df, levels):
+    fig = go.Figure()
 
-st.title("Stock Hunter Pro 🇺🇸")
-st.markdown("**US Market Focus: Quantitative & AI Analysis**")
+    # Minimalist Candlestick
+    fig.add_trace(go.Candlestick(
+        x=df.index,
+        open=df['Open'], high=df['High'],
+        low=df['Low'], close=df['Close'],
+        name='ราคา',
+        increasing_line_color='#ffffff', 
+        increasing_fillcolor='rgba(0,0,0,0)', 
+        decreasing_line_color='#ff3333',
+        decreasing_fillcolor='#ff3333'
+    ))
 
-with st.expander("⚠️ คำเตือนความเสี่ยง (Disclaimer)", expanded=True):
-    st.error("ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำทางการเงิน การลงทุนมีความเสี่ยง")
+    # Support Lines (Subtle)
+    for i, (price, _) in enumerate(levels[:3]):
+        fig.add_hlines(
+            y=price, 
+            line_dash="dot", 
+            line_width=1,
+            line_color="rgba(255, 255, 255, 0.4)",
+            annotation_text=f"ZONE {i+1}",
+            annotation_position="bottom right",
+            annotation_font_size=10,
+            annotation_font_color="rgba(255, 255, 255, 0.6)"
+        )
 
+    fig.update_layout(
+        template='plotly_dark',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        height=600,
+        margin=dict(l=0, r=40, t=20, b=20),
+        xaxis_rangeslider_visible=False,
+        xaxis=dict(showgrid=False, showline=True, linecolor='#333'),
+        yaxis=dict(showgrid=True, gridcolor='#222', side='right') 
+    )
+    return fig
+
+# -----------------------------------------------------------
+# Main Execution
+
+# Header
+st.markdown(f"<h3 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#666; font-weight:300;'>/ PRO TERMINAL</span></h3>", unsafe_allow_html=True)
+st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>DATE: {datetime.now().strftime('%Y-%m-%d')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Input Section
-col_input, col_btn = st.columns([3, 1])
-with col_input:
-    # Default เป็น NVDA ตามที่ต้องการ
-    symbol = st.text_input("🔍 ชื่อหุ้น US (Ticker)", value="NVDA", help="เช่น NVDA, TSLA, AAPL, MSFT").upper()
-with col_btn:
-    st.write("")
-    st.write("")
-    run_analysis = st.button("🚀 วิเคราะห์เลย", type="primary", use_container_width=True)
+if analyze_btn or symbol_input:
+    with st.spinner("กำลังประมวลผลข้อมูล..."):
+        df, full_name, currency = get_stock_data(symbol_input, period_input)
 
-if run_analysis:
-    with st.spinner(f"🇺🇸 กำลังดึงข้อมูล {symbol} จากตลาด US..."):
-        df, full_name = get_stock_data(symbol)
-        
-        if df is None:
-            st.error(f"❌ ไม่พบข้อมูลหุ้น '{symbol}'")
-            st.info("💡 เช็คตัวสะกด หรือ ลองกดวิเคราะห์ใหม่อีกครั้ง (บางทีเน็ต Server สะดุด)")
-            st.stop()
-            
-        current_price = df['Close'].iloc[-1]
-        year_high = df['High'].tail(52).max()
-        year_low = df['Low'].tail(52).min()
-        
-        # 1. Market Overview Card
-        with st.container(border=True):
-            st.subheader(f"🏢 {full_name} ({symbol})")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Price (USD)", f"${current_price:,.2f}")
-            m2.metric("52W High", f"${year_high:,.2f}")
-            m3.metric("52W Low", f"${year_low:,.2f}")
-            drawdown = ((current_price - year_high) / year_high) * 100
-            m4.metric("Drawdown", f"{drawdown:.1f}%", delta_color="inverse")
-
-        st.write("")
-
-        # 2. AI Analysis Section
-        if active_api_key:
-            with st.expander("🧠 AI Insight (บทวิเคราะห์พื้นฐาน)", expanded=True):
-                with st.spinner("🤖 AI กำลังอ่านงบการเงิน..."):
-                    analysis_text = get_ai_analysis(symbol, active_api_key)
-                    if analysis_text:
-                        st.markdown(analysis_text)
-                    else:
-                        st.warning("AI ไม่ตอบสนอง กรุณาลองใหม่")
-        elif user_status == "Guest":
-            st.warning("🔒 เข้าสู่ระบบด้านซ้ายเพื่อดูบทวิเคราะห์ AI")
-
-        st.markdown("### 🎯 แนวรับเชิงกลยุทธ์ (Support Zones)")
-        
-        # 3. Strategic Cards
-        fractals = calculate_fractals(df)
-        supports = [f for f in fractals if f[0] < current_price]
-        supports.sort(key=lambda x: x[0], reverse=True)
-        
-        if not supports:
-            st.info("📈 ราคาทำ New High หรือยังไม่มีฐานที่ชัดเจน")
+        if df is None or df.empty:
+            st.error(f"ไม่พบข้อมูล: {symbol_input}")
         else:
-            top_3 = supports[:3]
-            total_strength = sum(x[1] for x in top_3)
+            current_price = df['Close'].iloc[-1]
+            prev_close = df['Close'].iloc[-2]
+            change_pct = ((current_price - prev_close) / prev_close) * 100
             
-            cols = st.columns(len(top_3))
+            # --- METRICS BAR ---
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("ราคาล่าสุด", f"{current_price:,.2f}", f"{change_pct:.2f}%")
+            c2.metric("สูงสุด 52 สัปดาห์", f"{df['High'].tail(52).max():,.2f}")
+            c3.metric("ต่ำสุด 52 สัปดาห์", f"{df['Low'].tail(52).min():,.2f}")
+            c4.metric("ความผันผวน (ATR)", f"{(df['High']-df['Low']).tail(14).mean():,.2f}")
             
-            for i, (price, count) in enumerate(top_3):
-                weight = (count / total_strength)
-                gap_percent = ((current_price - price) / current_price) * 100
-                discount_from_high = ((year_high - price) / year_high) * 100
+            st.markdown("---")
+
+            # --- ANALYSIS ---
+            raw_levels = calculate_fractal_levels(df)
+            waiting_levels = [l for l in raw_levels if l[0] < current_price]
+            waiting_levels.sort(key=lambda x: x[0], reverse=True)
+            top_3 = waiting_levels[:3]
+
+            col_main, col_side = st.columns([3, 1])
+
+            with col_main:
+                st.markdown("**กราฟแสดงโครงสร้างราคา (Price Structure)**")
+                if top_3:
+                    fig = plot_minimal_chart(df, top_3)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.line_chart(df['Close'])
+                    st.info("ราคากำลังทำจุดสูงสุดใหม่ (All Time High) ไม่มีแนวรับด้านล่างในระยะใกล้")
+            
+            with col_side:
+                st.markdown("**โซนสะสมเชิงกลยุทธ์**")
                 
-                with cols[i]:
-                    with st.container(border=True):
-                        st.markdown(f"#### 🏷️ ไม้ที่ {i+1}")
+                if not top_3:
+                    st.markdown("""
+                    <div style="padding: 20px; color: #888; font-size: 13px; border: 1px dashed #444; border-radius: 4px; text-align: center;">
+                    ไม่พบแนวรับที่มีนัยสำคัญ<br>แนะนำให้รอฐานราคาใหม่
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    total_strength = sum(l[1] for l in top_3)
+                    
+                    for i, (price, count) in enumerate(top_3):
+                        weight = round((count / total_strength) * 100)
+                        gap = ((current_price - price) / current_price) * 100
                         
-                        st.metric(
-                            label="Target Price",
-                            value=f"${price:,.2f}",
-                            delta=f"Wait -{gap_percent:.1f}%",
-                            delta_color="normal"
-                        )
-                        st.divider()
-                        st.markdown(f"**Discount:** -{discount_from_high:.1f}%")
-                        st.markdown(f"**Strength:** {count} จุด")
-                        st.progress(weight)
+                        # Card UI
+                        st.markdown(f"""
+                        <div class="strategy-card">
+                            <div class="zone-label">ไม้ที่ {i+1} / น้ำหนัก {weight}%</div>
+                            <div class="price-tag">${price:,.2f}</div>
+                            <div style="margin-top: 10px; font-size: 12px; color: #888; font-family: 'Prompt'; display: flex; justify-content: space-between;">
+                                <span>ห่างปัจจุบัน: -{gap:.1f}%</span>
+                                <span>ความแข็งแกร่ง: {count}</span>
+                            </div>
+                            <div style="margin-top: 8px; height: 2px; background: #333; width: 100%;">
+                                <div style="height: 100%; background: #e0e0e0; width: {weight}%;"></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
