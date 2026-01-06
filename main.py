@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Stock Hunter Pro",
+    page_title="Stock Hunter: US Edition (Thai)",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -298,4 +298,3 @@ st.markdown("""
     ผู้พัฒนาระบบจะไม่รับผิดชอบต่อความเสียหายหรือการขาดทุนใดๆ ที่เกิดขึ้นจากการใช้งานข้อมูลนี้
 </div>
 """, unsafe_allow_html=True)
-
