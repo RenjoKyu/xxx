@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="Stock Hunter: US Edition",
+    page_title="Stock Hunter: US",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -335,5 +335,6 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
