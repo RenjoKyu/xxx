@@ -147,19 +147,17 @@ with st.sidebar:
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. Fetch History first (Most robust check if stock exists)
+        # 1. Fetch History first (เช็คว่ามีหุ้นนี้จริงไหม)
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
             return None, None, "ไม่พบข้อมูล (History Empty)", None
 
-        # 2. Get Info & Price using fast_info (More reliable for price)
+        # 2. Get Info & Price using fast_info (ราคาแม่นยำกว่า)
         try:
-            # fast_info is newer and faster
             currency = ticker.fast_info.currency
             current_price = ticker.fast_info.last_price
         except:
-            # Fallback to .info if fast_info fails
             info = ticker.info
             currency = info.get('currency', 'Unknown')
             current_price = info.get('currentPrice', info.get('regularMarketPrice', df['Close'].iloc[-1]))
@@ -171,15 +169,13 @@ def get_us_stock_data(symbol, period):
             else:
                 return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
 
-        # --- ส่วนที่แก้ไข: ดึงชื่อเต็มของบริษัท ---
+        # 4. Fetch Full Name (แก้ไขใหม่: ใช้ Logic 'or' เพื่อกันค่าเป็น None)
         try:
-            # ใช้ .info เพื่อดึง metadata (อาจจะช้ากว่า fast_info เล็กน้อย แต่ได้ชื่อเต็ม)
             stock_info = ticker.info
-            # พยายามดึง longName ก่อน ถ้าไม่มีเอา shortName ถ้าไม่มีเอา symbol
-            full_name = stock_info.get('longName', stock_info.get('shortName', symbol))
+            # ถ้า longName ไม่มี หรือเป็น None -> ให้ไปเอา shortName -> ถ้าไม่มีอีก -> เอา symbol
+            full_name = stock_info.get('longName') or stock_info.get('shortName') or symbol
         except Exception:
             full_name = symbol
-        # -----------------------------------
 
         return df, full_name, currency, current_price
 
@@ -335,6 +331,7 @@ st.markdown("""
 </div>
 
 """, unsafe_allow_html=True)
+
 
 
 
