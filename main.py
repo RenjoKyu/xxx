@@ -84,7 +84,7 @@ with st.sidebar:
     <div style='font-size: 12px; color: #666; font-family: "Prompt";'>
     ระบบ: FRACTAL GEOMETRY<br>
     สถานะ: พร้อมใช้งาน<br>
-    เวอร์ชัน: 2.1.0 (TH)
+    เวอร์ชัน: 2.1.1 (FIXED)
     </div>
     """, unsafe_allow_html=True)
     
@@ -142,9 +142,9 @@ def plot_minimal_chart(df, levels):
         decreasing_fillcolor='#ff3333'
     ))
 
-    # Support Lines (Subtle)
+    # Support Lines (Fixed: add_hline instead of add_hlines)
     for i, (price, _) in enumerate(levels[:3]):
-        fig.add_hlines(
+        fig.add_hline(
             y=price, 
             line_dash="dot", 
             line_width=1,
