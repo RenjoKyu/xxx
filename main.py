@@ -5,7 +5,7 @@ from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(
-    page_title="STOCK HUNTER",
+    page_title="Stock Hunter: US Edition (Thai)",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -128,6 +128,7 @@ with st.sidebar:
     
     symbol_input = st.text_input("ระบุชื่อย่อหุ้น (Ticker)", value="NVDA").upper()
     
+    # Default Timeframe = 5y
     period_input = st.selectbox("ระยะเวลาย้อนหลัง", ["1y", "2y", "5y", "10y"], index=2)
     
     st.markdown("---")
@@ -146,39 +147,39 @@ with st.sidebar:
 def get_us_stock_data(symbol, period):
     ticker = yf.Ticker(symbol)
     try:
-        # 1. Fetch History
+        # 1. Fetch History first (Most robust check if stock exists)
         df = ticker.history(period=period, interval="1wk")
         
         if df.empty:
             return None, None, "ไม่พบข้อมูล (History Empty)", None
 
-        # 2. Get Full Name and Price with robust fallback
-        full_name = symbol # Default
-        current_price = None
-        currency = "Unknown"
-
+        # 2. Get Info & Price using fast_info (More reliable for price)
         try:
-            # พยายามดึงจาก info ก่อน (ละเอียดสุด)
-            info = ticker.info
-            full_name = info.get('longName', symbol)
-            current_price = info.get('currentPrice', info.get('regularMarketPrice'))
-            currency = info.get('currency', 'USD')
+            # fast_info is newer and faster
+            currency = ticker.fast_info.currency
+            current_price = ticker.fast_info.last_price
         except:
-            # สำรองด้วย fast_info
-            try:
-                full_name = ticker.fast_info.get('longName', symbol)
-                current_price = ticker.fast_info.last_price
-                currency = ticker.fast_info.currency
-            except:
-                pass
-
-        # Fallback price if still None
-        if current_price is None:
-            current_price = df['Close'].iloc[-1]
+            # Fallback to .info if fast_info fails
+            info = ticker.info
+            currency = info.get('currency', 'Unknown')
+            current_price = info.get('currentPrice', info.get('regularMarketPrice', df['Close'].iloc[-1]))
 
         # 3. Filter US Only
-        if currency != 'USD' and '.' in symbol:
-            return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
+        if currency != 'USD':
+            if currency == 'Unknown' and '.' not in symbol:
+                currency = 'USD'
+            else:
+                return None, None, f"ไม่ใช่หุ้นสหรัฐฯ (ตรวจพบสกุลเงิน: {currency})", None
+
+        # --- ส่วนที่แก้ไข: ดึงชื่อเต็มของบริษัท ---
+        try:
+            # ใช้ .info เพื่อดึง metadata (อาจจะช้ากว่า fast_info เล็กน้อย แต่ได้ชื่อเต็ม)
+            stock_info = ticker.info
+            # พยายามดึง longName ก่อน ถ้าไม่มีเอา shortName ถ้าไม่มีเอา symbol
+            full_name = stock_info.get('longName', stock_info.get('shortName', symbol))
+        except Exception:
+            full_name = symbol
+        # -----------------------------------
 
         return df, full_name, currency, current_price
 
@@ -213,27 +214,36 @@ def calculate_fractal_levels(df):
 # Main Execution
 
 # Header Section
-st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ ฉบับหุ้นสหรัฐฯ</span></h2>", unsafe_allow_html=True)
+st.markdown(f"<h2 style='margin-bottom: 0;'>STOCK HUNTER <span style='color:#4CAF50; font-size:20px; font-weight:300;'>/ US</span></h2>", unsafe_allow_html=True)
 st.markdown(f"<p style='color:#666; font-size:12px; font-family:monospace;'>แหล่งข้อมูล: YAHOO FINANCE | วันที่: {datetime.now().strftime('%d/%m/%Y')}</p>", unsafe_allow_html=True)
 st.markdown("---")
 
 if analyze_btn or symbol_input:
     with st.spinner("กำลังประมวลผลข้อมูล..."):
-        df, full_name, error_msg, current_price = get_us_stock_data(symbol_input, period_input)
-
-        if df is None:
-            if "ไม่ใช่หุ้นสหรัฐฯ" in error_msg:
+        # Unpack 4 values
+        # Note: ตัวแปรที่ 3 (currency) เราไม่ได้รับมาใช้ในหน้านี้โดยตรง แต่ใช้รับ error_msg ถ้ามี error
+        # เพื่อความชัวร์ ใช้ try/except หรือเช็ค df is None เป็นหลัก
+        result = get_us_stock_data(symbol_input, period_input)
+        
+        # Unpack safely
+        if result[0] is None:
+            # Case Error
+            error_msg = result[2]
+            if "ไม่ใช่หุ้นสหรัฐฯ" in str(error_msg):
                 st.error(f"ระบบแจ้งเตือน: {error_msg}")
-            elif "ไม่พบข้อมูล" in error_msg:
+            elif "ไม่พบข้อมูล" in str(error_msg):
                 st.error(f"ไม่พบข้อมูล: '{symbol_input}' กรุณาตรวจสอบตัวสะกด")
             else:
                 st.error(f"เกิดข้อผิดพลาด: {error_msg}")
         else:
+            # Case Success
+            df, full_name, currency, current_price = result
+
             # คำนวณ High/Low 52 สัปดาห์
             one_year_high = df['High'].tail(52).max()
             one_year_low = df['Low'].tail(52).min()
             
-            # --- Company Header (Display Full Name) ---
+            # --- Company Header (แสดงชื่อเต็มตรงนี้) ---
             st.markdown(f"""
             <div>
                 <div class='company-name'>{full_name}</div>
@@ -271,7 +281,11 @@ if analyze_btn or symbol_input:
                 # Cards
                 for i, (price, count) in enumerate(top_3):
                     weight = round((count / total_strength) * 100)
+                    
+                    # คำนวณ % ห่างจากราคาปัจจุบัน
                     dist_from_curr = ((price - current_price) / current_price) * 100
+                    
+                    # คำนวณ % ห่างจากจุดสูงสุด (52 Week High)
                     dist_from_high = ((price - one_year_high) / one_year_high) * 100
                     
                     st.markdown(f"""
